@@ -26,6 +26,7 @@ import dev.jdtech.jellyfin.player.local.R
 import dev.jdtech.jellyfin.player.local.domain.PlaylistManager
 import dev.jdtech.jellyfin.player.local.mpv.MPVPlayer
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.LiveTvRepository
 import dev.jdtech.jellyfin.settings.domain.AppPreferences
 import dev.jdtech.jellyfin.settings.domain.Constants
 import java.util.UUID
@@ -52,6 +53,7 @@ constructor(
     private val application: Application,
     private val playlistManager: PlaylistManager,
     private val repository: JellyfinRepository,
+    private val liveTvRepository: LiveTvRepository,
     private val appPreferences: AppPreferences,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel(), Player.Listener {
@@ -89,6 +91,11 @@ constructor(
     private var currentMediaItemIndex = savedStateHandle["mediaItemIndex"] ?: 0
     private var playbackPosition: Long = savedStateHandle["position"] ?: 0
     private var currentMediaItemSegments: List<FindroidSegment> = emptyList()
+
+    val currentLiveStreamId: String?
+        get() = items.firstOrNull { it.itemId.toString() == player.currentMediaItem?.mediaId }?.liveStreamId
+    val isCurrentItemLive: Boolean
+        get() = items.firstOrNull { it.itemId.toString() == player.currentMediaItem?.mediaId }?.isLiveStream == true
 
     // Segments preferences
     var segmentsSkipButton: Boolean = false
@@ -245,16 +252,25 @@ constructor(
         val mediaId = player.currentMediaItem?.mediaId
         val position = player.currentPosition
         val duration = player.duration
+        val currentLiveId = currentLiveStreamId
+        val currentPlaySession = items.firstOrNull { it.itemId.toString() == mediaId }?.playSessionId
+        val isLive = isCurrentItemLive
+
         GlobalScope.launch {
             delay(200L)
             try {
-                if (mediaId != null && duration != C.TIME_UNSET) {
-                    Timber.d("Sending playback stop")
+                if (mediaId != null && (isLive || duration != C.TIME_UNSET)) {
                     repository.postPlaybackStop(
                         UUID.fromString(mediaId),
                         position.times(10000),
-                        position.div(duration.toFloat()).times(100).toInt(),
+                        if (isLive || duration <= 0) 0 else position.div(duration.toFloat()).times(100).toInt(),
+                        currentLiveId,
+                        currentPlaySession,
                     )
+                }
+                if (currentLiveId != null) {
+                    Timber.d("Closing live stream: $currentLiveId")
+                    liveTvRepository.closeLiveStream(currentLiveId)
                 }
             } catch (e: Exception) {
                 Timber.e(e)
@@ -280,6 +296,8 @@ constructor(
                         itemId,
                         player.currentPosition.times(10000),
                         !player.isPlaying,
+                        currentLiveStreamId,
+                        items.firstOrNull { it.itemId == itemId }?.playSessionId,
                     )
                 } catch (e: Exception) {
                     Timber.e(e)
@@ -344,56 +362,59 @@ constructor(
                 items
                     .first { it.itemId.toString() == player.currentMediaItem?.mediaId }
                     .let { item ->
-                        val itemTitle =
-                            if (item.parentIndexNumber != null && item.indexNumber != null) {
-                                if (item.indexNumberEnd == null) {
-                                    "S${item.parentIndexNumber}:E${item.indexNumber} - ${item.name}"
-                                } else {
-                                    "S${item.parentIndexNumber}:E${item.indexNumber}-${item.indexNumberEnd} - ${item.name}"
-                                }
+                        val itemTitle = if (item.isLiveStream) {
+                            item.name
+                        } else if (item.parentIndexNumber != null && item.indexNumber != null) {
+                            if (item.indexNumberEnd == null) {
+                                "S${item.parentIndexNumber}:E${item.indexNumber} - ${item.name}"
                             } else {
-                                item.name
+                                "S${item.parentIndexNumber}:E${item.indexNumber}-${item.indexNumberEnd} - ${item.name}"
                             }
+                        } else {
+                            item.name
+                        }
                         _uiState.update {
                             it.copy(
                                 currentItemTitle = itemTitle,
                                 currentSegment = null,
-                                currentChapters = item.chapters,
+                                currentChapters = if (item.isLiveStream) emptyList() else item.chapters,
                                 fileLoaded = false,
                             )
                         }
 
-                        repository.postPlaybackStart(item.itemId)
+                        repository.postPlaybackStart(item.itemId, item.liveStreamId, item.playSessionId)
 
-                        if (segmentsSkipButton || segmentsAutoSkip) {
-                            getSegments(item.itemId)
+                        if (!item.isLiveStream) {
+                            if (segmentsSkipButton || segmentsAutoSkip) {
+                                getSegments(item.itemId)
+                            }
+
+                            if (appPreferences.getValue(appPreferences.playerTrickplay)) {
+                                getTrickplay(item)
+                            }
+
+                            playlistManager.setCurrentMediaItemIndex(item.itemId)
+
+                            val previousItem = playlistManager.getPreviousPlayerItem()
+                            if (previousItem != null) {
+                                items.add(player.currentMediaItemIndex, previousItem)
+                                player.addMediaItem(
+                                    player.currentMediaItemIndex,
+                                    previousItem.toMediaItem(),
+                                )
+                            }
+
+                            val nextItem = playlistManager.getNextPlayerItem()
+                            if (nextItem != null) {
+                                items.add(player.currentMediaItemIndex + 1, nextItem)
+                                player.addMediaItem(
+                                    player.currentMediaItemIndex + 1,
+                                    nextItem.toMediaItem(),
+                                )
+                            }
+
+                            Timber.tag("PlayerItems").d(items.map { it.indexNumber }.toString())
                         }
-
-                        if (appPreferences.getValue(appPreferences.playerTrickplay)) {
-                            getTrickplay(item)
-                        }
-
-                        playlistManager.setCurrentMediaItemIndex(item.itemId)
-
-                        val previousItem = playlistManager.getPreviousPlayerItem()
-                        if (previousItem != null) {
-                            items.add(player.currentMediaItemIndex, previousItem)
-                            player.addMediaItem(
-                                player.currentMediaItemIndex,
-                                previousItem.toMediaItem(),
-                            )
-                        }
-
-                        val nextItem = playlistManager.getNextPlayerItem()
-                        if (nextItem != null) {
-                            items.add(player.currentMediaItemIndex + 1, nextItem)
-                            player.addMediaItem(
-                                player.currentMediaItemIndex + 1,
-                                nextItem.toMediaItem(),
-                            )
-                        }
-
-                        Timber.tag("PlayerItems").d(items.map { it.indexNumber }.toString())
                     }
             } catch (e: Exception) {
                 Timber.e(e)
@@ -408,6 +429,11 @@ constructor(
                 reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM &&
                 player.playbackState == ExoPlayer.STATE_READY
         ) {
+            if (isCurrentItemLive) {
+                // For live streams, don't auto-advance - just notify back
+                eventsChannel.trySend(PlayerEvents.NavigateBack)
+                return
+            }
             viewModelScope.launch {
                 val mediaId = player.currentMediaItem?.mediaId
                 val position = player.currentPosition
@@ -442,7 +468,9 @@ constructor(
             }
             ExoPlayer.STATE_ENDED -> {
                 stateString = "ExoPlayer.STATE_ENDED     -"
-                eventsChannel.trySend(PlayerEvents.NavigateBack)
+                if (!isCurrentItemLive) {
+                    eventsChannel.trySend(PlayerEvents.NavigateBack)
+                }
             }
         }
         Timber.d("Changed player state to $stateString")

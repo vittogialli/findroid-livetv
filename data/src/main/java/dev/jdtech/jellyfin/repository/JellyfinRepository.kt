@@ -96,11 +96,23 @@ interface JellyfinRepository {
 
     suspend fun postCapabilities()
 
-    suspend fun postPlaybackStart(itemId: UUID)
+    suspend fun postPlaybackStart(itemId: UUID, liveStreamId: String? = null, playSessionId: String? = null)
 
-    suspend fun postPlaybackStop(itemId: UUID, positionTicks: Long, playedPercentage: Int)
+    suspend fun postPlaybackStop(
+        itemId: UUID,
+        positionTicks: Long,
+        playedPercentage: Int,
+        liveStreamId: String? = null,
+        playSessionId: String? = null,
+    )
 
-    suspend fun postPlaybackProgress(itemId: UUID, positionTicks: Long, isPaused: Boolean)
+    suspend fun postPlaybackProgress(
+        itemId: UUID,
+        positionTicks: Long,
+        isPaused: Boolean,
+        liveStreamId: String? = null,
+        playSessionId: String? = null,
+    )
 
     suspend fun markAsFavorite(itemId: UUID)
 

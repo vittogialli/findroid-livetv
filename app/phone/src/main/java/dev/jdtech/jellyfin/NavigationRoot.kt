@@ -43,6 +43,7 @@ import dev.jdtech.jellyfin.models.FindroidShow
 import dev.jdtech.jellyfin.presentation.film.CollectionScreen
 import dev.jdtech.jellyfin.presentation.film.DownloadsScreen
 import dev.jdtech.jellyfin.presentation.film.EpisodeScreen
+import dev.jdtech.jellyfin.presentation.film.LiveTvScreen
 import dev.jdtech.jellyfin.presentation.film.FavoritesScreen
 import dev.jdtech.jellyfin.presentation.film.HomeScreen
 import dev.jdtech.jellyfin.presentation.film.LibraryScreen
@@ -80,6 +81,8 @@ import kotlinx.serialization.Serializable
 @Serializable data object MediaRoute
 
 @Serializable data object DownloadsRoute
+
+@Serializable data object LiveTvRoute
 
 @Serializable
 data class LibraryRoute(
@@ -127,6 +130,12 @@ val downloadsTab =
         icon = CoreR.drawable.ic_download,
         route = DownloadsRoute,
     )
+val liveTvTab =
+    TabBarItem(
+        title = CoreR.string.live_tv,
+        icon = CoreR.drawable.ic_tv,
+        route = LiveTvRoute,
+    )
 
 @Composable
 fun NavigationRoot(
@@ -147,7 +156,7 @@ fun NavigationRoot(
 
     val navigationItems =
         when (isOfflineMode) {
-            false -> listOf(homeTab, mediaTab, downloadsTab)
+            false -> listOf(homeTab, mediaTab, liveTvTab, downloadsTab)
             true -> listOf(homeTab, downloadsTab)
         }
     val navigationItemClassNames = navigationItems.map { it.route::class.qualifiedName }
@@ -331,6 +340,9 @@ fun NavigationRoot(
                         navigateToItem(navController = navController, item = item)
                     }
                 )
+            }
+            composable<LiveTvRoute> {
+                LiveTvScreen()
             }
             composable<LibraryRoute> { backStackEntry ->
                 val route: LibraryRoute = backStackEntry.toRoute()

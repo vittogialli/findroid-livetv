@@ -21,6 +21,10 @@ data class FindroidMediaStream(
 )
 
 fun MediaStream.toFindroidMediaStream(jellyfinRepository: JellyfinRepository): FindroidMediaStream {
+    return toFindroidMediaStream(jellyfinRepository.getBaseUrl())
+}
+
+fun MediaStream.toFindroidMediaStream(baseUrl: String): FindroidMediaStream {
     return FindroidMediaStream(
         title = title.orEmpty(),
         displayTitle = displayTitle,
@@ -28,7 +32,7 @@ fun MediaStream.toFindroidMediaStream(jellyfinRepository: JellyfinRepository): F
         type = type,
         codec = codec.orEmpty(),
         isExternal = isExternal,
-        path = jellyfinRepository.getBaseUrl() + deliveryUrl,
+        path = deliveryUrl?.let { baseUrl + it },
         channelLayout = channelLayout,
         videoRangeType = videoRangeType,
         height = height,

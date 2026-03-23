@@ -15,6 +15,8 @@ data class FindroidSource(
     val size: Long,
     val mediaStreams: List<FindroidMediaStream>,
     val downloadId: Long? = null,
+    val liveStreamId: String? = null,
+    val playSessionId: String? = null,
 )
 
 suspend fun MediaSourceInfo.toFindroidSource(

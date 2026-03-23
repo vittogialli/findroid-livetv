@@ -3,6 +3,7 @@ package dev.jdtech.jellyfin.player.local.domain
 import androidx.core.net.toUri
 import androidx.media3.common.MimeTypes
 import dev.jdtech.jellyfin.models.FindroidChapter
+import dev.jdtech.jellyfin.models.FindroidChannel
 import dev.jdtech.jellyfin.models.FindroidEpisode
 import dev.jdtech.jellyfin.models.FindroidItem
 import dev.jdtech.jellyfin.models.FindroidMovie
@@ -13,6 +14,7 @@ import dev.jdtech.jellyfin.player.core.domain.models.PlayerChapter
 import dev.jdtech.jellyfin.player.core.domain.models.PlayerItem
 import dev.jdtech.jellyfin.player.core.domain.models.TrickplayInfo
 import dev.jdtech.jellyfin.repository.JellyfinRepository
+import dev.jdtech.jellyfin.repository.LiveTvRepository
 import java.util.UUID
 import javax.inject.Inject
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -20,7 +22,10 @@ import org.jellyfin.sdk.model.api.ItemFields
 import org.jellyfin.sdk.model.api.MediaStreamType
 import timber.log.Timber
 
-class PlaylistManager @Inject internal constructor(private val repository: JellyfinRepository) {
+class PlaylistManager @Inject internal constructor(
+    private val repository: JellyfinRepository,
+    private val liveTvRepository: LiveTvRepository,
+) {
     private var startItem: FindroidItem? = null
     private var items: List<FindroidItem> = emptyList()
     private val playerItems: MutableList<PlayerItem> = mutableListOf()
@@ -108,6 +113,11 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
 
                     items = episodes
                     episode
+                }
+                BaseItemKind.LIVE_TV_CHANNEL, BaseItemKind.TV_CHANNEL -> {
+                    val channel = liveTvRepository.getChannel(itemId)
+                    items = listOf(channel)
+                    channel
                 }
                 else -> null
             }
@@ -206,7 +216,10 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
     ): PlayerItem {
         Timber.d("Converting FindroidItem ${this.id} to PlayerItem")
 
-        val mediaSources = repository.getMediaSources(id, true)
+        val mediaSources = when (this) {
+            is FindroidChannel -> liveTvRepository.getLiveMediaSources(id)
+            else -> repository.getMediaSources(id, true)
+        }
         val mediaSource =
             if (mediaSourceIndex == null) {
                 mediaSources.firstOrNull { it.type == FindroidSourceType.LOCAL } ?: mediaSources[0]
@@ -250,19 +263,33 @@ class PlaylistManager @Inject internal constructor(private val repository: Jelly
                 }
                 else -> null
             }
-        return PlayerItem(
-            name = name,
-            itemId = id,
-            mediaSourceId = mediaSource.id,
-            mediaSourceUri = mediaSource.path,
-            playbackPosition = playbackPosition,
-            parentIndexNumber = if (this is FindroidEpisode) parentIndexNumber else null,
-            indexNumber = if (this is FindroidEpisode) indexNumber else null,
-            indexNumberEnd = if (this is FindroidEpisode) indexNumberEnd else null,
-            externalSubtitles = externalSubtitles,
-            chapters = chapters.toPlayerChapters(),
-            trickplayInfo = trickplayInfo,
-        )
+
+        return when (this) {
+            is FindroidChannel -> PlayerItem(
+                name = name,
+                itemId = id,
+                mediaSourceId = mediaSource.id,
+                mediaSourceUri = mediaSource.path,
+                playbackPosition = 0,
+                externalSubtitles = externalSubtitles,
+                liveStreamId = mediaSource.liveStreamId,
+                playSessionId = mediaSource.playSessionId,
+                isLiveStream = true,
+            )
+            else -> PlayerItem(
+                name = name,
+                itemId = id,
+                mediaSourceId = mediaSource.id,
+                mediaSourceUri = mediaSource.path,
+                playbackPosition = playbackPosition,
+                parentIndexNumber = if (this is FindroidEpisode) parentIndexNumber else null,
+                indexNumber = if (this is FindroidEpisode) indexNumber else null,
+                indexNumberEnd = if (this is FindroidEpisode) indexNumberEnd else null,
+                externalSubtitles = externalSubtitles,
+                chapters = chapters.toPlayerChapters(),
+                trickplayInfo = trickplayInfo,
+            )
+        }
     }
 
     private fun List<FindroidChapter>.toPlayerChapters(): List<PlayerChapter> {

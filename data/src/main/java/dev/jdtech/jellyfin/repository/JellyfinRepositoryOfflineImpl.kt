@@ -229,12 +229,14 @@ class JellyfinRepositoryOfflineImpl(
 
     override suspend fun postCapabilities() {}
 
-    override suspend fun postPlaybackStart(itemId: UUID) {}
+    override suspend fun postPlaybackStart(itemId: UUID, liveStreamId: String?, playSessionId: String?) {}
 
     override suspend fun postPlaybackStop(
         itemId: UUID,
         positionTicks: Long,
         playedPercentage: Int,
+        liveStreamId: String?,
+        playSessionId: String?,
     ) {
         withContext(Dispatchers.IO) {
             when {
@@ -259,6 +261,8 @@ class JellyfinRepositoryOfflineImpl(
         itemId: UUID,
         positionTicks: Long,
         isPaused: Boolean,
+        liveStreamId: String?,
+        playSessionId: String?,
     ) {
         withContext(Dispatchers.IO) {
             database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, positionTicks)

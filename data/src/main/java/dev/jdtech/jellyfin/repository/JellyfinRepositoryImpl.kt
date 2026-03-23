@@ -417,7 +417,7 @@ class JellyfinRepositoryImpl(
         }
     }
 
-    override suspend fun postPlaybackStart(itemId: UUID) {
+    override suspend fun postPlaybackStart(itemId: UUID, liveStreamId: String?, playSessionId: String?) {
         Timber.d("Sending start $itemId")
         withContext(Dispatchers.IO) {
             jellyfinApi.playStateApi.reportPlaybackStart(
@@ -429,6 +429,8 @@ class JellyfinRepositoryImpl(
                     playMethod = PlayMethod.DIRECT_PLAY,
                     repeatMode = RepeatMode.REPEAT_NONE,
                     playbackOrder = PlaybackOrder.DEFAULT,
+                    liveStreamId = liveStreamId,
+                    playSessionId = playSessionId,
                 )
             )
         }
@@ -438,29 +440,41 @@ class JellyfinRepositoryImpl(
         itemId: UUID,
         positionTicks: Long,
         playedPercentage: Int,
+        liveStreamId: String?,
+        playSessionId: String?,
     ) {
         Timber.d("Sending stop $itemId")
         withContext(Dispatchers.IO) {
-            when {
-                playedPercentage < 10 -> {
-                    database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, 0)
-                    database.setPlayed(jellyfinApi.userId!!, itemId, false)
-                }
-                playedPercentage > 90 -> {
-                    database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, 0)
-                    database.setPlayed(jellyfinApi.userId!!, itemId, true)
-                }
-                else -> {
-                    database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, positionTicks)
-                    database.setPlayed(jellyfinApi.userId!!, itemId, false)
+            if (liveStreamId == null) {
+                when {
+                    playedPercentage < 10 -> {
+                        database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, 0)
+                        database.setPlayed(jellyfinApi.userId!!, itemId, false)
+                    }
+                    playedPercentage > 90 -> {
+                        database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, 0)
+                        database.setPlayed(jellyfinApi.userId!!, itemId, true)
+                    }
+                    else -> {
+                        database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, positionTicks)
+                        database.setPlayed(jellyfinApi.userId!!, itemId, false)
+                    }
                 }
             }
             try {
                 jellyfinApi.playStateApi.reportPlaybackStopped(
-                    PlaybackStopInfo(itemId = itemId, positionTicks = positionTicks, failed = false)
+                    PlaybackStopInfo(
+                        itemId = itemId,
+                        positionTicks = positionTicks,
+                        failed = false,
+                        liveStreamId = liveStreamId,
+                        playSessionId = playSessionId,
+                    )
                 )
             } catch (_: Exception) {
-                database.setUserDataToBeSynced(jellyfinApi.userId!!, itemId, true)
+                if (liveStreamId == null) {
+                    database.setUserDataToBeSynced(jellyfinApi.userId!!, itemId, true)
+                }
             }
         }
     }
@@ -469,10 +483,14 @@ class JellyfinRepositoryImpl(
         itemId: UUID,
         positionTicks: Long,
         isPaused: Boolean,
+        liveStreamId: String?,
+        playSessionId: String?,
     ) {
         Timber.d("Posting progress of $itemId, position: $positionTicks")
         withContext(Dispatchers.IO) {
-            database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, positionTicks)
+            if (liveStreamId == null) {
+                database.setPlaybackPositionTicks(itemId, jellyfinApi.userId!!, positionTicks)
+            }
             try {
                 jellyfinApi.playStateApi.reportPlaybackProgress(
                     PlaybackProgressInfo(
@@ -484,10 +502,14 @@ class JellyfinRepositoryImpl(
                         repeatMode = RepeatMode.REPEAT_NONE,
                         playbackOrder = PlaybackOrder.DEFAULT,
                         positionTicks = positionTicks,
+                        liveStreamId = liveStreamId,
+                        playSessionId = playSessionId,
                     )
                 )
             } catch (_: Exception) {
-                database.setUserDataToBeSynced(jellyfinApi.userId!!, itemId, true)
+                if (liveStreamId == null) {
+                    database.setUserDataToBeSynced(jellyfinApi.userId!!, itemId, true)
+                }
             }
         }
     }
