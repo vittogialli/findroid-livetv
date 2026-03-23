@@ -1,3 +1,33 @@
+# THIS IS A FORK!!! 
+# Original project at [jarnedemeulemeester/findroid](https://github.com/jarnedemeulemeester/findroid), go give the dev some love!
+
+LLM-assisted / vibecoded / slop implementation of jellyfin's `Live TV` function on Findroid.  
+Because i was bored one night, and wanted Live TV without jellyfin's clunky UI.  
+A couple hours of [opencode](https://opencode.ai) later, and this frankenstein moster of an app was born.
+
+Note that this is nowhere near production ready, and currently lacks:
+- EPG (schedules, programs, guide, series)
+- Recordings (both the ability to record and to play back recordings)
+- A good UI (currently re-uses the list UI from the downloads page, with no sorting options or search function)
+- Any customization in the settings menu
+
+### so, what is there?
+well, currently:
+- channel list
+- playback
+
+On top of all this, the AI generated code has **NOT** been reviewed/proofread by anyone, and you should refrain from using this potentially buggy/unsafe/insecure fork for anything critical.
+
+If i still haven't convinced you to use something else, here's the build instructions  
+```
+git clone https://github.com/vittogialli/findroid-livetv.git
+cd findroid-livetv
+./gradlew :app:phone:assembleLibreDebug
+```
+the final apk will be at `findroid-livetv/app/phone/build/outputs/apk/libre/debug/phone-libre-arm64-v8a-debug.apk`
+
+# Original README below
+
 ![Findroid banner](images/findroid-banner.png)
 
 # Findroid
